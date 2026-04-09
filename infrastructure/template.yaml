@@ -1,0 +1,198 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Verite — Serverless review intelligence pipeline.
+  Ingests product reviews from S3, enriches them via Amazon Bedrock,
+  and stores structured results in DynamoDB.
+
+# ── Parameters ────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+    Description: Deployment environment
+
+# ── Globals (applied to all Lambda functions) ─────────────────────────────────
+Globals:
+  Function:
+    Runtime: python3.11
+    Architectures: [x86_64]
+    Timeout: 60
+    MemorySize: 256
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        REVIEWS_QUEUE_URL: !Ref VeriteReviewsQueue
+        BEDROCK_REGION: us-east-2
+        BEDROCK_MODEL_ID: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── S3: Review upload bucket ─────────────────────────────────────────────────
+  VeriteReviewsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub verite-reviews-${Environment}-${AWS::AccountId}
+      # Notify the ingestor Lambda when a new file is uploaded
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .json
+            Function: !GetAtt VeriteIngestorFunction.Arn
+      # Block all public access — reviews are internal data
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  # Permission allowing S3 to invoke the ingestor Lambda
+  VeriteIngestorS3Permission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt VeriteIngestorFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt VeriteReviewsBucket.Arn
+
+  # ── SQS: Dead letter queue (catches reviews that fail enrichment repeatedly) ──
+  VeriteReviewsDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub verite-reviews-dlq-${Environment}
+      # Keep failed messages for 7 days for investigation
+      MessageRetentionPeriod: 604800
+
+  # ── SQS: Main reviews queue ───────────────────────────────────────────────────
+  VeriteReviewsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub verite-reviews-${Environment}
+      # Visibility timeout must be >= Lambda timeout to prevent duplicate processing
+      VisibilityTimeout: 120
+      # Retry a review up to 3 times before sending to DLQ
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VeriteReviewsDLQ.Arn
+        maxReceiveCount: 3
+
+  # ── Lambda: Ingestor ──────────────────────────────────────────────────────────
+  # Triggered by S3 uploads. Reads the review file and fans each review
+  # out as an individual SQS message for independent processing.
+  VeriteIngestorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub verite-ingestor-${Environment}
+      CodeUri: ../functions/ingestor/
+      Handler: handler.lambda_handler
+      Description: Reads uploaded review files from S3 and fans out to SQS
+      Policies:
+        # Read uploaded files from S3
+        - S3ReadPolicy:
+            BucketName: !Sub verite-reviews-${Environment}-${AWS::AccountId}
+        # Send messages to the reviews queue
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt VeriteReviewsQueue.QueueName
+
+  # ── Lambda: Enricher ──────────────────────────────────────────────────────────
+  # Triggered by SQS. Calls Bedrock to enrich each review,
+  # then writes the result to DynamoDB (added in Week 3).
+  VeriteEnricherFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub verite-enricher-${Environment}
+      CodeUri: ../functions/enricher/
+      Handler: handler.lambda_handler
+      Description: Enriches reviews via Bedrock and stores results
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt VeriteReviewsQueue.Arn
+            # Process one review at a time for clean, independent retries
+            BatchSize: 1
+            # If enrichment fails, don't delete the message — let SQS retry
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+      Policies:
+        # Call Claude via Amazon Bedrock
+        - Statement:
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+            Resource: "*"
+        # Write enriched results to DynamoDB (table added in Week 3)
+        - DynamoDBCrudPolicy:
+            TableName: !Sub verite-enriched-reviews-${Environment}
+
+  # ── CloudWatch: Log groups with retention ─────────────────────────────────────
+  # Explicit log groups let us control retention rather than keeping logs forever.
+  VeriteIngestorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/verite-ingestor-${Environment}
+      RetentionInDays: 30
+
+  VeriteEnricherLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/verite-enricher-${Environment}
+      RetentionInDays: 30
+
+  VeriteDLQLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /verite/dlq-${Environment}
+      RetentionInDays: 90
+
+  # ── CloudWatch: Alarm on DLQ depth ───────────────────────────────────────────
+  # Fires when any review lands in the dead letter queue.
+  # In Week 4 we wire this to SNS for email/Slack alerts.
+  VeriteDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub verite-dlq-not-empty-${Environment}
+      AlarmDescription: >
+        Reviews are failing enrichment and landing in the DLQ.
+        Check the enricher Lambda logs for errors.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt VeriteReviewsDLQ.QueueName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+# ── Outputs (printed after deployment) ───────────────────────────────────────
+Outputs:
+  ReviewsBucketName:
+    Description: Upload review files here to trigger the pipeline
+    Value: !Ref VeriteReviewsBucket
+
+  ReviewsQueueUrl:
+    Description: SQS queue URL (used by the ingestor Lambda)
+    Value: !Ref VeriteReviewsQueue
+
+  IngestorFunctionArn:
+    Description: ARN of the ingestor Lambda
+    Value: !GetAtt VeriteIngestorFunction.Arn
+
+  EnricherFunctionArn:
+    Description: ARN of the enricher Lambda
+    Value: !GetAtt VeriteEnricherFunction.Arn
+
+  DLQUrl:
+    Description: Dead letter queue — check here for failed reviews
+    Value: !Ref VeriteReviewsDLQ

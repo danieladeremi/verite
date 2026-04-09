@@ -1,0 +1,92 @@
+[
+  {
+    "review_id": "R001",
+    "product_id": "B08XYZ1234",
+    "product_name": "Wireless Bluetooth Headphones",
+    "rating": 2,
+    "title": "Stopped working after 2 weeks",
+    "body": "The sound quality was great at first but the left earbud completely stopped working after two weeks of normal use. Customer service was unhelpful and told me to just buy a new pair. Really disappointed for a $80 product. The charging case also scratches incredibly easily.",
+    "date": "2025-11-03"
+  },
+  {
+    "review_id": "R002",
+    "product_id": "B08XYZ1234",
+    "product_name": "Wireless Bluetooth Headphones",
+    "rating": 5,
+    "title": "Best headphones I've owned",
+    "body": "Incredible sound quality and the noise cancellation is top notch. Battery lasts the full 30 hours as advertised. Comfortable for long listening sessions and the case feels premium. Pairing was instant with my phone. Highly recommend.",
+    "date": "2025-11-05"
+  },
+  {
+    "review_id": "R003",
+    "product_id": "B08XYZ1234",
+    "product_name": "Wireless Bluetooth Headphones",
+    "rating": 3,
+    "title": "Good but connectivity is annoying",
+    "body": "Sound is fine for the price. My main issue is that it disconnects from my phone every time I walk more than 10 feet away from it. Also takes forever to reconnect. The ear cushions are comfortable though and the mic quality on calls is surprisingly decent.",
+    "date": "2025-11-07"
+  },
+  {
+    "review_id": "R004",
+    "product_id": "B08XYZ1234",
+    "product_name": "Wireless Bluetooth Headphones",
+    "rating": 1,
+    "title": "DO NOT BUY - broke on arrival",
+    "body": "Arrived with a cracked hinge on the headband. Packaging looked fine so this must be a manufacturing defect. Took 3 weeks to get a replacement and the replacement had the same issue. The quality control on these is terrible. Returning for a full refund.",
+    "date": "2025-11-10"
+  },
+  {
+    "review_id": "R005",
+    "product_id": "B08XYZ1234",
+    "product_name": "Wireless Bluetooth Headphones",
+    "rating": 4,
+    "title": "Great value, minor software quirks",
+    "body": "For the price these are excellent. The companion app crashes occasionally on Android but the headphones work fine without it. Sound profile is warm and bassy which I love. Would give 5 stars if the app was more stable. Build quality feels solid.",
+    "date": "2025-11-11"
+  },
+  {
+    "review_id": "R006",
+    "product_id": "B09ABC5678",
+    "product_name": "Stainless Steel Water Bottle",
+    "rating": 5,
+    "title": "Keeps drinks cold all day",
+    "body": "Put ice in at 7am and still had ice at 5pm. The lid seal is perfect, zero leaks even in my bag. Love the matte finish and the size fits in every cup holder I've tried. Already bought two more as gifts.",
+    "date": "2025-11-08"
+  },
+  {
+    "review_id": "R007",
+    "product_id": "B09ABC5678",
+    "product_name": "Stainless Steel Water Bottle",
+    "rating": 2,
+    "title": "Lid leaks and handle broke",
+    "body": "The lid started leaking after the first wash. I only hand washed it as instructed. The handle also snapped off when I dropped it from about 3 feet. For a stainless steel bottle I expected better durability. The insulation works fine but what good is that if it leaks everywhere.",
+    "date": "2025-11-09"
+  },
+  {
+    "review_id": "R008",
+    "product_id": "B09ABC5678",
+    "product_name": "Stainless Steel Water Bottle",
+    "rating": 3,
+    "title": "Decent bottle, lid is frustrating",
+    "body": "The bottle itself is great quality and keeps things cold. But the lid is incredibly hard to open with one hand, which defeats the purpose of a water bottle you use while working out. Also has a slight metallic taste for the first week. Gets better after multiple washes.",
+    "date": "2025-11-12"
+  },
+  {
+    "review_id": "R009",
+    "product_id": "B07DEF9012",
+    "product_name": "Laptop Stand Adjustable",
+    "rating": 5,
+    "title": "Solved my neck pain",
+    "body": "I was getting serious neck pain from looking down at my laptop all day. This stand fixed it completely. Super sturdy, holds my 15 inch MacBook with no wobble. Height adjustment is smooth and locks in place. Worth every penny for the ergonomic benefit.",
+    "date": "2025-11-06"
+  },
+  {
+    "review_id": "R010",
+    "product_id": "B07DEF9012",
+    "product_name": "Laptop Stand Adjustable",
+    "rating": 1,
+    "title": "Collapsed under normal use",
+    "body": "The locking mechanism failed after three days and the stand collapsed while my laptop was on it. Thankfully my laptop was not damaged but this is completely unacceptable. The metal feels thin and cheap. The product photos are clearly misleading about the build quality.",
+    "date": "2025-11-13"
+  }
+]
