@@ -79,7 +79,7 @@ After deployment, SAM prints the stack outputs including your bucket name.
 
 ### Upload a review file to trigger the pipeline:
 ```powershell
-aws s3 cp sample_data/reviews_sample.json s3://verite-reviews-dev-<YOUR_ACCOUNT_ID>/ --region us-east-2
+aws s3 cp sample_data/reviews_sample.json s3://verite-reviews-dev-598456800380/ --region us-east-2
 ```
 
 Replace `<YOUR_ACCOUNT_ID>` with your AWS account ID (visible in the top-right

@@ -34,6 +34,7 @@ Resources:
   # ── S3: Review upload bucket ─────────────────────────────────────────────────
   VeriteReviewsBucket:
     Type: AWS::S3::Bucket
+    DependsOn: VeriteIngestorS3Permission
     Properties:
       BucketName: !Sub verite-reviews-${Environment}-${AWS::AccountId}
       # Notify the ingestor Lambda when a new file is uploaded
@@ -56,13 +57,15 @@ Resources:
         Status: Enabled
 
   # Permission allowing S3 to invoke the ingestor Lambda
+  # SourceArn omitted to avoid circular dependency with VeriteReviewsBucket.
+  # Security is maintained by the bucket name being globally unique and account-scoped.
   VeriteIngestorS3Permission:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !GetAtt VeriteIngestorFunction.Arn
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
-      SourceArn: !GetAtt VeriteReviewsBucket.Arn
+      SourceAccount: !Ref AWS::AccountId
 
   # ── SQS: Dead letter queue (catches reviews that fail enrichment repeatedly) ──
   VeriteReviewsDLQ:
