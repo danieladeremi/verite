@@ -25,6 +25,7 @@ Globals:
       Variables:
         ENVIRONMENT: !Ref Environment
         REVIEWS_QUEUE_URL: !Ref VeriteReviewsQueue
+        ENRICHED_REVIEWS_TABLE: !Ref VeriteEnrichedReviewsTable
         BEDROCK_REGION: us-east-2
         BEDROCK_MODEL_ID: us.anthropic.claude-sonnet-4-5-20250929-v1:0
 
@@ -34,19 +35,8 @@ Resources:
   # ── S3: Review upload bucket ─────────────────────────────────────────────────
   VeriteReviewsBucket:
     Type: AWS::S3::Bucket
-    DependsOn: VeriteIngestorS3Permission
     Properties:
       BucketName: !Sub verite-reviews-${Environment}-${AWS::AccountId}
-      # Notify the ingestor Lambda when a new file is uploaded
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: suffix
-                    Value: .json
-            Function: !GetAtt VeriteIngestorFunction.Arn
       # Block all public access — reviews are internal data
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -55,17 +45,6 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
-
-  # Permission allowing S3 to invoke the ingestor Lambda
-  # SourceArn omitted to avoid circular dependency with VeriteReviewsBucket.
-  # Security is maintained by the bucket name being globally unique and account-scoped.
-  VeriteIngestorS3Permission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt VeriteIngestorFunction.Arn
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceAccount: !Ref AWS::AccountId
 
   # ── SQS: Dead letter queue (catches reviews that fail enrichment repeatedly) ──
   VeriteReviewsDLQ:
@@ -87,6 +66,25 @@ Resources:
         deadLetterTargetArn: !GetAtt VeriteReviewsDLQ.Arn
         maxReceiveCount: 3
 
+  # DynamoDB: Enriched review storage (Week 3)
+  # Partition by product for product-specific aggregations.
+  # Sort key uses date + review_id so we can query time windows per product.
+  VeriteEnrichedReviewsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub verite-enriched-reviews-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: product_id
+          AttributeType: S
+        - AttributeName: review_sort_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: product_id
+          KeyType: HASH
+        - AttributeName: review_sort_key
+          KeyType: RANGE
+
   # ── Lambda: Ingestor ──────────────────────────────────────────────────────────
   # Triggered by S3 uploads. Reads the review file and fans each review
   # out as an individual SQS message for independent processing.
@@ -97,6 +95,17 @@ Resources:
       CodeUri: ../functions/ingestor/
       Handler: handler.lambda_handler
       Description: Reads uploaded review files from S3 and fans out to SQS
+      Events:
+        S3Upload:
+          Type: S3
+          Properties:
+            Bucket: !Ref VeriteReviewsBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .json
       Policies:
         # Read uploaded files from S3
         - S3ReadPolicy:
@@ -134,7 +143,26 @@ Resources:
             Resource: "*"
         # Write enriched results to DynamoDB (table added in Week 3)
         - DynamoDBCrudPolicy:
-            TableName: !Sub verite-enriched-reviews-${Environment}
+            TableName: !Ref VeriteEnrichedReviewsTable
+
+  # Lambda: Query API (Week 3)
+  # Seller dashboard calls this endpoint to fetch aggregate issue/sentiment signals.
+  VeriteQueryApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub verite-query-api-${Environment}
+      CodeUri: ../functions/query_api/
+      Handler: handler.lambda_handler
+      Description: Returns product-level aggregate review signals from DynamoDB
+      Events:
+        GetProductSignals:
+          Type: Api
+          Properties:
+            Path: /products/{product_id}/signals
+            Method: get
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref VeriteEnrichedReviewsTable
 
   # ── CloudWatch: Log groups with retention ─────────────────────────────────────
   # Explicit log groups let us control retention rather than keeping logs forever.
@@ -148,6 +176,12 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/verite-enricher-${Environment}
+      RetentionInDays: 30
+
+  VeriteQueryApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/verite-query-api-${Environment}
       RetentionInDays: 30
 
   VeriteDLQLogGroup:
@@ -195,6 +229,18 @@ Outputs:
   EnricherFunctionArn:
     Description: ARN of the enricher Lambda
     Value: !GetAtt VeriteEnricherFunction.Arn
+
+  QueryApiFunctionArn:
+    Description: ARN of the query API Lambda
+    Value: !GetAtt VeriteQueryApiFunction.Arn
+
+  QueryApiBaseUrl:
+    Description: Base URL for the product signals API
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod
+
+  EnrichedReviewsTableName:
+    Description: DynamoDB table containing enriched review records
+    Value: !Ref VeriteEnrichedReviewsTable
 
   DLQUrl:
     Description: Dead letter queue — check here for failed reviews

@@ -16,8 +16,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 
-# Add the enricher directory to the path so we can import from it
-sys.path.insert(0, str(Path(__file__).parent.parent / "functions" / "enricher"))
+# Add project root to path so package imports resolve in pytest.
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from functions.enricher.bedrock_client import (
     _parse_enrichment,
@@ -183,7 +183,7 @@ class TestInvokeBedrock(unittest.TestCase):
         mock_client.invoke_model.return_value = {"body": mock_response_body}
         return mock_client
 
-    @patch("bedrock_client.boto3.client")
+    @patch("functions.enricher.bedrock_client.boto3.client")
     def test_returns_enrichment_on_success(self, mock_boto3_client):
         mock_boto3_client.return_value = self._make_mock_client(VALID_ENRICHMENT)
 
@@ -193,7 +193,7 @@ class TestInvokeBedrock(unittest.TestCase):
         self.assertAlmostEqual(result["score"], 0.15)
         self.assertIn("left earbud stopped working", result["issues"])
 
-    @patch("bedrock_client.boto3.client")
+    @patch("functions.enricher.bedrock_client.boto3.client")
     def test_passes_correct_model_id(self, mock_boto3_client):
         mock_client = self._make_mock_client(VALID_ENRICHMENT)
         mock_boto3_client.return_value = mock_client
@@ -201,9 +201,9 @@ class TestInvokeBedrock(unittest.TestCase):
         invoke_bedrock(SAMPLE_REVIEW, region="us-east-1")
 
         call_kwargs = mock_client.invoke_model.call_args[1]
-        self.assertIn("anthropic.claude-3-5-sonnet", call_kwargs["modelId"])
+        self.assertIn("claude-sonnet-4-5", call_kwargs["modelId"])
 
-    @patch("bedrock_client.boto3.client")
+    @patch("functions.enricher.bedrock_client.boto3.client")
     def test_raises_on_invalid_model_response(self, mock_boto3_client):
         mock_response_body = MagicMock()
         mock_response_body.read.return_value = json.dumps({
@@ -216,7 +216,7 @@ class TestInvokeBedrock(unittest.TestCase):
         with self.assertRaises(BedrockInvocationError):
             invoke_bedrock(SAMPLE_REVIEW, region="us-east-1")
 
-    @patch("bedrock_client.boto3.client")
+    @patch("functions.enricher.bedrock_client.boto3.client")
     def test_raises_on_boto3_client_error(self, mock_boto3_client):
         from botocore.exceptions import ClientError
         mock_client = MagicMock()
